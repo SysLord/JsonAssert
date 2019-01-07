@@ -6,6 +6,7 @@ import java.io.PrintStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -13,9 +14,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-
-import org.springframework.core.annotation.AnnotationUtils;
-import org.springframework.util.ReflectionUtils;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -217,15 +215,21 @@ public final class JsonAssert {
 
 	private static <A extends Annotation> Map<String, Object> getAllJsonPropertyValues(Object instance, Class<?> clazz) {
 		Map<String, Object> properties = new HashMap<>();
-		ReflectionUtils.doWithFields(
-				clazz,
-				field -> {
-					field.setAccessible(true);
-					properties.put(
-							field.getName(),
-							field.get(instance));
-				},
-				field -> AnnotationUtils.getAnnotation(field, JsonProperty.class) != null);
+
+		Arrays.stream(clazz.getDeclaredFields())
+				.peek(field -> field.setAccessible(true))
+				.filter(field -> field.getAnnotation(JsonProperty.class) != null)
+				.forEach(field -> {
+					try {
+						properties.put(
+								field.getName(),
+								field.get(instance));
+
+					} catch (IllegalArgumentException | IllegalAccessException e) {
+						throw new RuntimeException(e);
+					}
+				});
+
 		return properties;
 	}
 
