@@ -1,6 +1,8 @@
 package de.syslord.microservices.json;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
@@ -20,6 +22,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 public final class JsonAssert {
 
+	public static final ObjectMapper mapper = new ObjectMapper();
+	public static PrintStream debugOut = new PrintStream(new ByteArrayOutputStream());
+
 	/**
 	 * Uses JsonProperty annotation in fields to compare given instance with
 	 * serialized and deserialized instance.
@@ -33,20 +38,42 @@ public final class JsonAssert {
 	 *
 	 */
 	public static <T> void assertEqualUsingJsonProperty(T object) throws IOException {
-		Object serializeAndBack = serializeAndBack(object, object.getClass());
-
-		List<String> errors = compareObjects(object, serializeAndBack);
+		List<String> errors = compareObjects(object);
 
 		if (!errors.isEmpty()) {
 			throw new RuntimeException(errors.stream().collect(Collectors.joining("\n")));
 		}
 	}
 
-	protected static Object serializeAndBack(Object object, Class<?> clazz) throws IOException {
-		ObjectMapper mapper = new ObjectMapper();
+	protected static <T> List<String> compareObjects(T object) {
+		Object result = serializeAndBack(object, object.getClass());
+		List<String> errors = compareObjects(object, result);
+		debugOut.println("errors:\n" + errors);
+		return errors;
+	}
 
-		String string = mapper.writeValueAsString(object);
-		return mapper.readerFor(clazz).readValue(string);
+	protected static Object serializeAndBack(Object object, Class<?> clazz) {
+		String json = serialize(object);
+		debugOut.println("serialized:\n" + json);
+		Object deserialized = deserialize(clazz, json);
+		debugOut.println("deserialized:\n" + serialize(deserialized));
+		return deserialized;
+	}
+
+	private static Object deserialize(Class<?> clazz, String json) {
+		try {
+			return mapper.readerFor(clazz).readValue(json);
+		} catch (IOException ex) {
+			throw new RuntimeException(ex);
+		}
+	}
+
+	private static String serialize(Object object) {
+		try {
+			return mapper.writeValueAsString(object);
+		} catch (IOException ex) {
+			throw new RuntimeException(ex);
+		}
 	}
 
 	private static <T> List<String> compareObjects(T before, Object after) {
@@ -98,9 +125,7 @@ public final class JsonAssert {
 			return;
 		}
 
-		if (!after.equals(before)) {
-			errors.add(String.format("%s was '%s' is '%s'", key, before, after));
-		}
+		unknownObjectEquals(key, before, after, errors);
 	}
 
 	private static void compareCollections(Object key, Collection<?> before, Collection<?> after, List<String> errors) {
@@ -108,7 +133,7 @@ public final class JsonAssert {
 		int lenAfter = after.size();
 
 		if (lenBefore != lenAfter) {
-			errors.add(String.format("%s collection length was %d is %d", key, lenBefore, lenAfter));
+			errors.add(String.format("'%s' collection length was %d is %d", key, lenBefore, lenAfter));
 			return;
 		}
 
@@ -125,14 +150,14 @@ public final class JsonAssert {
 			} else if (a == null ^ b == null) {
 				equal = false;
 				break;
-			} else if (!unknownObjectEquals(b, a, errors)) {
+			} else if (!unknownObjectEquals(key + "[?]", b, a, errors)) {
 				equal = false;
 				break;
 			}
 		}
 
 		if (!equal) {
-			errors.add(String.format("%s collections do not match", key));
+			errors.add(String.format("'%s' collections do not match", key));
 		}
 	}
 
@@ -155,7 +180,7 @@ public final class JsonAssert {
 			} else if (a == null ^ b == null) {
 				equal = false;
 				break;
-			} else if (!unknownObjectEquals(b, a, errors)) {
+			} else if (!unknownObjectEquals(key + "[" + i + "]", b, a, errors)) {
 				equal = false;
 				break;
 			}
@@ -166,23 +191,24 @@ public final class JsonAssert {
 		}
 	}
 
-	private static boolean unknownObjectEquals(Object before, Object after, List<String> errors) {
+	private static boolean unknownObjectEquals(Object key, Object before, Object after, List<String> errors) {
 		boolean hasJsonPropertyValues = hasJsonPropertyValues(before, before.getClass());
 
 		if (hasJsonPropertyValues) {
-			return compareJsonPropertiesAndMergeErrors(before, after, errors);
+			List<String> subErrors = compareObjects(before, after);
+			if (subErrors.size() > 0) {
+				errors.addAll(subErrors);
+				errors.add(String.format("%s was '%s' is '%s'", key, before, after));
+				return false;
+			}
+			return true;
 		} else {
-			return after.equals(before);
+			boolean equals = after.equals(before);
+			if (!equals) {
+				errors.add(String.format("%s was '%s' is '%s'", key, before, after));
+			}
+			return equals;
 		}
-	}
-
-	private static boolean compareJsonPropertiesAndMergeErrors(Object b, Object a, List<String> errors) {
-		List<String> subErrors = compareObjects(b, a);
-		if (subErrors.size() > 0) {
-			errors.addAll(subErrors);
-			return false;
-		}
-		return true;
 	}
 
 	private static <A extends Annotation> boolean hasJsonPropertyValues(Object instance, Class<?> clazz) {
