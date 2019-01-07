@@ -1,11 +1,12 @@
 package de.syslord.microservices.json;
 
-import static org.junit.Assert.*;
-
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -16,18 +17,15 @@ import org.springframework.util.ReflectionUtils;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.google.common.collect.Sets.SetView;
 
 public final class JsonAssert {
 
 	/**
-	 * Uses JsonProperty annotation in fields to compare given instance with serialized and deserialized
-	 * instance.
+	 * Uses JsonProperty annotation in fields to compare given instance with
+	 * serialized and deserialized instance.
 	 *
-	 * - Nested Objects with JsonProperty annotated fields will also be compared by field value.
+	 * - Nested Objects with JsonProperty annotated fields will also be compared by
+	 * field value.
 	 *
 	 * - arrays and lists are compared by element.
 	 *
@@ -51,18 +49,15 @@ public final class JsonAssert {
 		return mapper.readerFor(clazz).readValue(string);
 	}
 
-	protected static void assertEqualsWhenDeSerialized(Object object, Class<?> clazz) throws IOException {
-		Object serializeAndBack = serializeAndBack(object, clazz);
-		assertEquals(object, serializeAndBack);
-	}
-
 	private static <T> List<String> compareObjects(T before, Object after) {
 		Map<String, Object> beforeValues = getAllJsonPropertyValues(before, before.getClass());
 		Map<String, Object> afterValues = getAllJsonPropertyValues(after, after.getClass());
 
-		SetView<String> union = Sets.union(beforeValues.keySet(), afterValues.keySet());
+		HashSet<String> union = new HashSet<>();
+		union.addAll(beforeValues.keySet());
+		union.addAll(afterValues.keySet());
 
-		List<String> errors = Lists.newArrayList();
+		List<String> errors = new ArrayList<>();
 		union.forEach(key -> collectErrors(key, beforeValues, afterValues, errors));
 		return errors;
 	}
@@ -195,7 +190,7 @@ public final class JsonAssert {
 	}
 
 	private static <A extends Annotation> Map<String, Object> getAllJsonPropertyValues(Object instance, Class<?> clazz) {
-		Map<String, Object> properties = Maps.newHashMap();
+		Map<String, Object> properties = new HashMap<>();
 		ReflectionUtils.doWithFields(
 				clazz,
 				field -> {
