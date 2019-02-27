@@ -13,6 +13,5 @@ JsonAssert.assertEqualUsingJsonProperty(<instance>);
 
 
 ## Known Drawbacks
- * The imports are a mess. spring-core is only required for RefletionUtils.
  * If a field is not comparable by equals it cannot be compared successfully, so it needs to be null.
  
